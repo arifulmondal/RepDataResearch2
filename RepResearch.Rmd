@@ -1,0 +1,237 @@
+---
+title: "RepResearch2:  U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database Analysis"
+author: "Ariful Mondal"
+date: "Wednesday, September 17, 2014"
+output: html_document
+---
+
+-----------------------------------------------------------------------------
+
+# Synopsis
+
+## Introduction
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+## Analysis Goal
+
+The basic goal of this exercise is to explore the NOAA Storm Database and answer some basic questions about severe weather events. We would primarily address following two questions through some basic analysis.
+
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+2. Across the United States, which types of events have the greatest economic consequences?
+
+# Data
+
+The data for this assignment come in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. You can download the file from the course web site:
+
+[Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) [47Mb]
+There is also some documentation of the database available. Here you will find how some of the variables are constructed/defined.
+
+National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
+
+# Data Processing
+
+```{r, echo=TRUE}
+library(data.table)
+library(xtable)
+library(ggplot2)
+library(lattice)
+library(plyr)
+library(knitr)
+library(lubridate)
+options(scipen=999)
+```
+
+## Downloading Data
+
+Download the [storm data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) from web using 
+the script `download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2","StormData.csv.bz2")` or manually and save the file as "StormData.csv.bz2" in your present working directory of current R-session. Here, we would download the file using script only.
+
+```{r, cache=TRUE, echo=TRUE}
+library(RCurl)
+file<-"StormData.csv.bz2"
+url<-"http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(url, file, mode = "wb")
+```
+
+## Loading Data 
+
+In **R** reading in a .bz2 file can be done using `read.table()` command as we have done here to read "StormData.csv.bz2". Sometime we may have to ise `bzfile("file.bz2", "rt")` to uncompress file and then read.
+
+```{r,cache = TRUE, echo=TRUE}
+stormData<-read.table(file, sep=",", header=TRUE)
+```
+
+We have used `echo=TRUE` to print the code chunk in the report and `cache=TRUE` with the r-chunk to reduce re-production time of large data processing when the processing being done already, no need to run the code again.
+
+## Basic Analysis
+
+It is always good to know some basics about the contents of the data using `dim()`,`head()`, `tail()`, `summary()` or `str()` like functions before proceeding further.
+
+```{r, cache=TRUE, echo=TRUE, comment=NA}
+str(stormData)
+````
+
+```{r, cache=TRUE, echo=FALSE}
+nobs<-formatC(nrow(stormData), format="d", big.mark=',')
+nvars<-ncol(stormData)
+````
+
+There are `r nobs` observations and `r nvars` columns in the Storm Data. `str()` also produces basic summaries of each columns (variables) in the data along with type of variables like "numeric", integer",
+"factor", "character", "date" etc. so that we can make right transformation of variables when needed.
+
+## Data Transformation
+
+For this analysis we would require only fewer variables/columns from "stormData" to analyze severe weather events viz. EVTYPE - Type of events, FATALITIES - Fatalities, BGN_DATE - Begining date, PROPDMG-Property Damage. We will subset the data for faster processing.
+
+```{r, echo=TRUE, cache=TRUE, comment=NA}
+subStormData<-stormData[,c("EVTYPE", "FATALITIES", "BGN_DATE", "PROPDMG")]
+str(subStormData)
+```
+
+Lets convert the "BGN_DATE" to readable date format from factor for calculation.
+
+```{r, echo=TRUE, cache=TRUE, comment=NA}
+subStormData$BGN_DATE <- strptime(subStormData$BGN_DATE, format = "%m/%d/%Y 0:00:00")
+str(subStormData$BGN_DATE)
+subStormData$Year<-as.factor(year(subStormData$BGN_DATE))
+str(subStormData)
+```
+
+# Results
+
+
+
+## Analysis
+
+### 1. Across the United States, which types of events are most harmful with respect to population health?
+
+```{r, echo=TRUE, cache=TRUE}
+severity <- as.data.frame(aggregate(subStormData$FATALITIES ~ subStormData$EVTYPE, FUN = sum))
+colnames(severity) <- c("Event.Type","Fatalities")
+severity<-severity[order(severity$Fatalities, decreasing=TRUE),]
+rownames(severity)<-NULL
+```
+
+Graphical representation of Top 10 harmful events with respect to population health.
+
+```{r, echo=TRUE}
+y_max<-max(severity$Fatalities)
+ggplot(data = head(severity,10), aes(x = Event.Type, y = Fatalities, ymax=y_max+100))+
+        geom_bar(aes(fill=Event.Type),  stat = "Identity",  position = position_dodge(width=0.9)) +
+        xlab('Event Type') +  ylab("Fatalities") +theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+        labs(title="Impact on US Population by Natural Events")+
+        geom_text(aes(label = Fatalities), size = 3, position = "stack", angel=90) 
+```
+
+Top 20 events that are most harmful with respect to population health are
+
+```{r, echo=TRUE, cache=TRUE, comment=NA}
+severity$Fatalities<-formatC(severity$Fatalities, big.mark=",", format="d")
+kable(head(severity,20), format = "pandoc", padding = 0,row.names = FALSE, caption="Nationawide Top 20 Harmful Events")
+```
+
+### 2. Across the United States, which types of events have the greatest economic consequences?
+
+Summarizing property damages with respect to event type. "Economic.Loss"" is the total losses across US by event type.
+
+```{r, echo=TRUE, cache=TRUE, comment=NA}
+ecDamage <- as.data.frame(aggregate(subStormData$PROPDMG ~ subStormData$EVTYPE, FUN = sum))
+colnames(ecDamage) <- c("Event.Type","Economic.Loss")
+ecDamage<-ecDamage[order(ecDamage$Economic.Loss, decreasing=TRUE),]
+rownames(ecDamage)<-NULL
+str(ecDamage)
+ecDamage$Eco_Loss_Thousand<-round(ecDamage$Economic.Loss/1000,2)
+```
+
+Due to big numbers in "Economic.Loss", we would divide it by 1,000 to make more friendly representation and call that varibale as "Eco_Loss_Thousand".
+
+Graphical representation of Top 10 harmful events with respect to population health.
+
+```{r, echo=TRUE}
+y_max<-max(ecDamage$Economic.Loss)
+ggplot(data = head(ecDamage,10), aes(x = Event.Type, y = Eco_Loss_Thousand, ymax=y_max/1000+100))+
+        geom_bar(aes(fill=Event.Type),  stat = "Identity",  position = position_dodge(width=0.9)) +
+        xlab('Event Type') +  ylab("Economic Losses ( in thousands)") + 
+        theme(axis.text.x = element_text(angle = 45, hjust = 1, size=8))+
+        labs(title="US Property Losses ('000) by Top 10 Harmful Events")+
+        geom_text(aes(label = Eco_Loss_Thousand), size = 3, position = "stack", angle=90) 
+```
+
+Top 20 harmful events that are causing most of the property damages across the US.
+
+```{r, echo=TRUE, cache=TRUE, comment=NA}
+ecDamage$Eco_Loss_Thousand<-format(ecDamage$Eco_Loss_Thousand, big.mark=",", format="d")
+ecDamage$Economic.Loss<-format(ecDamage$Economic.Loss, big.mark=",", format="d")
+kable(head(ecDamage,20), format = "pandoc", padding = 0,row.names = FALSE, caption="Nationawide Top 20 Harmful Events")
+```
+
+### Yearly Trends
+
+```{r, echo=TRUE, cache=TRUE, comment=NA}
+Yearly_fatalities<-aggregate(subStormData$FATALITIES, by = list(subStormData$Year), 
+                              FUN = "sum", na.rm = TRUE)
+Yearly_damage<-aggregate(subStormData$PROPDMG, by = list(subStormData$Year), 
+                                 FUN = "sum", na.rm = TRUE)
+colnames(Yearly_fatalities)<-c("Year","fatalities")
+colnames(Yearly_damage)<-c("Year","damage")
+Yearly_losses<-merge(Yearly_fatalities, Yearly_damage, by="Year")
+rownames(Yearly_losses)<-NULL
+last_10Yrs<-tail(Yearly_losses, 10)
+last_10Yrs$damage_K<-round(last_10Yrs$damage/1000,2)
+y_max_1<-max(last_10Yrs$fatalities)+100
+y_max_2<-max(last_10Yrs$damage_K)+100
+```
+
+```{r, echo=TRUE, comment=NA}
+library(grid)
+library(gridExtra)
+p1 <- 
+    ggplot(data = last_10Yrs, aes(x = Year, y = fatalities, ymax=y_max_1))+
+        geom_bar(aes(fill=Year),  stat = "Identity",  position = position_dodge(width=0.9)) +
+        xlab('Year') +  ylab("Fatalities") + 
+        theme(axis.text.x = element_text(angle = 45, hjust = 1, size=8))+
+        labs(title="Fatalities")+
+        geom_text(aes(label = fatalities), size = 3, position = "stack", angle=90) 
+
+p2 <- 
+    ggplot(data = last_10Yrs, aes(x = Year, y = damage_K, ymax=y_max_2))+
+        geom_bar(aes(fill=Year),  stat = "Identity",  position = position_dodge(width=0.9)) +
+        xlab('Year') +  ylab("Property Damages") + 
+        theme(axis.text.x = element_text(angle = 45, hjust = 1, size=8))+
+        labs(title="Property Damages ('000)")+
+        geom_text(aes(label = damage_K), size = 3, position = "stack", angle=90) 
+grid.arrange(p1, p2, ncol = 2, main = "Distribution of Losses due to different Event in the US")
+```
+
+## Findings
+
+We can observer from the analysis that "Tornado" is most harmful event causing maximum losses of properties and harming population health. There are significant amount of fatalities happened due to Excessive Heat and property losses due to Flash Floods, Flood and TSTM Winds.
+
+
+--------------------------------------------------------------------------------------
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Note that the `echo = TRUE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r, echo=FALSE}
+# Load packages
+#require(knitr)
+#require(markdown)
+
+# Create .md, .html, and .pdf files
+#knit("My_Analysis.Rmd")
+#markdownToHTML('My_Analysis.md', 'My_Analysis.html', options=c("use_xhml"))
+#system("pandoc -s RepResearch.html -o RepResearch.pdf")
+```
